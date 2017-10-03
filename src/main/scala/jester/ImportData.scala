@@ -1,26 +1,25 @@
 package jester
 
+import jester.Schemas._
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types.StructType
 
-object ImportData extends FileNames{
+object ImportData extends FileNames with DownloadUrls {
 
-  def apply(): Unit = {
-    //  Import files (TODO tidy away)
-    if (!scala.tools.nsc.io.Path(trainFileName).exists) {
-      val url = "https://query.data.world/s/xEzuH2qsyXPCRheqbIYuVifPlwn9Bh"
+  def downloadAndSaveOnce(spark: SparkSession, url: String, filePath: String, schema: StructType, outFile: String): Unit = {
+    if (!scala.tools.nsc.io.Path(filePath).exists) {
       val csv = scala.io.Source.fromURL(url)
-      scala.tools.nsc.io.Path(trainFileName).createFile().writeAll(csv.mkString)
-    }
+      scala.tools.nsc.io.Path(filePath).createFile().writeAll(csv.mkString)
 
-    if (!scala.tools.nsc.io.Path(testFileName).exists) {
-      val testUrl = "https://query.data.world/s/HWy0QkAkgCO7txGSEcPXIlXARQ9UHU"
-      val csv = scala.io.Source.fromURL(testUrl)
-      scala.tools.nsc.io.Path(testFileName).createFile().writeAll(csv.mkString)
+      // save as Parquet
+      val df = spark.read.option("header", true).schema(schema).csv(filePath)
+      df.write.mode("overwrite").parquet(outFile)
     }
+  }
 
-    if (!scala.tools.nsc.io.Path(validationFileName).exists) {
-      val validationUrl = "https://query.data.world/s/m2lqv4IUeCgUhNvMvYiOihKBVVVIml"
-      val csv = scala.io.Source.fromURL(validationUrl)
-      scala.tools.nsc.io.Path(validationFileName).createFile().writeAll(csv.mkString)
-    }
+  def apply(spark: SparkSession): Unit = {
+    downloadAndSaveOnce(spark, trainUrl, trainFileName, ratingsSchema, trainParquet)
+    downloadAndSaveOnce(spark, testUrl, testFileName, testRatingsSchema, testParquet)
+    downloadAndSaveOnce(spark, validationUrl, validationFileName, ratingsSchema, validationParquet)
   }
 }
