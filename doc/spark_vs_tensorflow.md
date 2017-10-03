@@ -1,9 +1,9 @@
 # Spark vs Tensorflow
 
 #### Usage
-![usage header](file://C:\Users\msinton\Documents\research\images\usage_header.png)
+![usage header](..\images\usage_header.png)
 
-![usage](file://C:\Users\msinton\Documents\research\images\tensorflow_spark_usage.png)
+![usage](..\images\tensorflow_spark_usage.png)
 
 source: http://www.kdnuggets.com/2017/05/poll-analytics-data-science-machine-learning-software-leaders.html/2
 
@@ -57,9 +57,9 @@ Then **bias** measures how far off on average you are from the correct
 Whereas **variance** measures how much the predictions for a given item **vary**.
 
 
-![bias varaince scatter](file://C:\Users\msinton\Documents\research\images\bias_variance.png)
+![bias varaince scatter](..\images\bias_variance.png)
 
-![bias varaince line](file://C:\Users\msinton\Documents\research\images\biasvariance.png)
+![bias varaince line](..\images\biasvariance.png)
 
 - bias–variance decomposition
     - a way of analyzing a learning algorithm's **expected generalization error**
