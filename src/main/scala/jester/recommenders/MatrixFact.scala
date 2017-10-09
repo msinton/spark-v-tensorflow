@@ -15,13 +15,14 @@ object MatrixFact extends FileNames {
     import spark.implicits._
 
     val training = spark.sqlContext.read.parquet(trainParquet)
+    val testSet = spark.sqlContext.read.parquet(testParquet)
     val validationSet = spark.sqlContext.read.parquet(validationParquet)
 
     // Build the recommendation model using ALS
     val maxNumIterations = 100
 
     // to evaluate - score top 5 %
-    val window = Window.partitionBy("userId").orderBy(desc("prediction"))
+    val windowByUserId_descPred = Window.partitionBy("userId").orderBy(desc("prediction"))
 
     val evaluator = new RegressionEvaluator()
       .setMetricName("rmse")
@@ -43,9 +44,9 @@ object MatrixFact extends FileNames {
       rank <- List(16)
       lambda <- List(8e-2)
       model = alsBuilder.setRank(rank).setRegParam(lambda).fit(training)
-      ratesAndPreds = model.transform(validationSet)
+      ratesAndPreds = model.transform(testSet).join(validationSet, Seq("userId", "jokeId"))
       rmse = evaluator.evaluate(ratesAndPreds)
-      withRank = ratesAndPreds.withColumn("rank", percent_rank.over(window))
+      withRank = ratesAndPreds.withColumn("rank", percent_rank.over(windowByUserId_descPred))
       score = withRank.filter($"rank" <= 0.05).select(avg($"rating")).head().get(0)
     } yield (rank, lambda, score, rmse, model)
 

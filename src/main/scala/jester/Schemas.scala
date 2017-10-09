@@ -8,7 +8,7 @@ object Schemas {
 
   val ratingsSchema = Encoders.product[JokeRatings].schema
 
-  case class JokeRatingsTest(userId: String, jokeId: String)
+  case class JokeRatingsTest(userId: Int, jokeId: Int)
 
   val testRatingsSchema = Encoders.product[JokeRatingsTest].schema
 
