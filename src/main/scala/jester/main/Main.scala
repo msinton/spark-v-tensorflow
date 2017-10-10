@@ -19,7 +19,8 @@ object Main extends App {
 
 //  recommenders.Popularity.run
 //  recommenders.MatrixFact.run
-  recommenders.JokesSimilarity.run
+//  recommenders.JokesTfIdf.run
+  recommenders.JokesContentSimilarity.run
 
 
   spark.close()
