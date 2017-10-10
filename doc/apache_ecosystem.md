@@ -18,7 +18,7 @@ HADOOP
 
 ### Tech notes
 - reportedly badly written Java
-- superseded by "Spark + FS"
+- MapReduce component superseded by "Spark + FS" (FS = distributed file system)
 
 ### Conclusions
 - Often only used for Data Warehousing

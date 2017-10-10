@@ -1,126 +1,241 @@
 package jester.recommenders
 
 import jester.FileNames
-import org.apache.spark.mllib.linalg.SparseVector
+import jester.common._
 import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.{Encoders, Row, SparkSession}
+
+case class JokeSimilarities(jokeId: JokeId, similarities: SparseVector)
+case class RawSims(jokeId: JokeId, similarities: Vector)
 
 
 object JokesSimilarity extends FileNames {
 
-  def run(implicit spark: SparkSession) = {
+  def createSimilaritiesDF(implicit spark: SparkSession) = {
 
     import spark.implicits._
 
     val training = spark.sqlContext.read.parquet(trainParquet)
-    val validationSet = spark.sqlContext.read.parquet(validationParquet)
 
     val numJokes = training.select(max("jokeId")).head().getAs[Int](0) + 1
 
     // (userId, (jokeId, rating))
-    val ratingsByUserId: RDD[(Int, (Array[Int], Array[Double]))] = training.rdd.map {
-      case Row(userId: Int, jokeId: Int, rating: Double) => (userId, Map(jokeId -> rating))
+    val ratingsByUserId: RDD[(UserId, (Array[JokeId], Array[JokeRating]))] = training.rdd.map {
+      case Row(userId: UserId, jokeId: JokeId, rating: JokeRating) => (userId, Map(jokeId -> rating))
     }.reduceByKey(_ ++ _).map {
-      case (userId, jokeRatings) => (userId, jokeRatings.toArray.sortBy(_._1).unzip[Int, Double])
+      case (userId, jokeRatings) => (userId, jokeRatings.toArray.sortBy(_._1).unzip[JokeId, JokeRating])
     }
 
-    // Cosine similarity between jokes base on user ratings
-    val jokeSimilarities = {
+    // Cosine similarity between jokes based on user ratings
+    val (jokeSimilarities_upper, jokeSimilarities_lower)  = {
       val ratingsByUserIdSparse = ratingsByUserId.map {
         case (userId, (jokes, ratings)) => IndexedRow(userId, new SparseVector(numJokes, jokes, ratings))
       }
 
-      val s = new IndexedRowMatrix(ratingsByUserIdSparse).columnSimilarities()
-      spark.sqlContext.createDataFrame(s.toIndexedRowMatrix.rows).toDF("jokeId", "similarities")
+      val similaritiesMatrix_upper = new IndexedRowMatrix(ratingsByUserIdSparse).columnSimilarities()
+      val similaritiesMatrix_lower = similaritiesMatrix_upper.transpose()
+
+      (
+        spark.sqlContext.createDataFrame(similaritiesMatrix_upper.toIndexedRowMatrix.rows)
+          .toDF("jokeId", "similarities")
+          .withColumn("jokeId", $"jokeId".cast(IntegerType))
+        ,
+        spark.sqlContext.createDataFrame(similaritiesMatrix_lower.toIndexedRowMatrix.rows)
+          .toDF("jokeId", "similarities")
+          .withColumn("jokeId", $"jokeId".cast(IntegerType))
+      )
     }
 
-    jokeSimilarities.write.save(jokeSimilaritiesDir)
-
-    // now, given jokes that the user rates highly I can find similar jokes.
-
-    val windowByUsers_descRating = Window.partitionBy("userId").orderBy(desc("rating"))
-
-    val trainingWithRank = training.withColumn("rank", rank.over(windowByUsers_descRating))
-
-    val numPredictionsToMakeByUserForScoring =
-      validationSet.withColumn("percentRank", percent_rank.over(windowByUsers_descRating))
-      .filter($"percentRank" <= 0.05)
-      .groupBy("userId")
-      .count()
-
-    // separate users that have a good rated joke in our training set, from those that do not
-
-    val applicableUsers = trainingWithRank.filter($"rating" >= 5).select($"userId").distinct()
-    val applicableValidationSet = numPredictionsToMakeByUserForScoring.join(applicableUsers, Seq("userId"), "inner")
-    val remainingValidationSet = numPredictionsToMakeByUserForScoring.join(applicableValidationSet, Seq("userId"), "left_anti")
-
-    val sortedJokeSimilarities = jokeSimilarities.rdd.map { r =>
-      val vector = r.getAs[SparseVector](1)
-      val zipped = vector.indices zip vector.values
-      val (jokeIds, similarityScores) = zipped.sortBy(-_._2).unzip
-      (r.getAs[Long](0).toInt, jokeIds, similarityScores)
-    }.toDF("jokeId", " jokeIds", "similarityScores")
-
-    val validationWithTraining =
-      applicableValidationSet.join(trainingWithRank.filter($"rank" === 1L), "userId")
-      .select("userId", "count", "jokeId", "rating")
-      .toDF("userId", "toPredictCount", "jokeId", "rating")
-
-    val joinedToSimilar = validationWithTraining.rdd.map { r =>
-        val userId = r.getAs[Int](0)
-        val numToPredict = r.getAs[Long](1).toInt
-        val favouriteJokeId = r.getAs[Int](2)
-        (userId, numToPredict, favouriteJokeId)
-      }.toDF("userId", "numToPredict", "favouriteJokeId")
-      .as("a")
-      .join(sortedJokeSimilarities.as("similarities"), $"a.favouriteJokeId" === $"similarities.jokeId")
-
-    // `explode` here takes the Array of jokes and creates a new row for each of these - so that we can
-    // evaluate predictions as normal
-
-    val userBestJokePredictionsForScoring = joinedToSimilar.rdd.map{ r =>
-        val numToPredict = r.getAs[Int](1)
-        (r.getAs[Int](0), r.getAs[Seq[Int]](4).take(numToPredict))
-      }
-      .toDF("userId", "predictedJokeIds").as("a")
-      .withColumn("predictedJokeId", explode($"a.predictedJokeIds")).drop($"a.predictedJokeIds")
-
-    // I need to now get the user's ratings for each of these jokes, and calc the mean
-
-    val score = userBestJokePredictionsForScoring.as("a").join(
-      validationSet.as("v"), $"a.userId" === $"v.userId" && $"a.predictedJokeId" === $"v.jokeId")
-      .select(avg($"rating"))
-
-//    score.show // 5.1266044283  - 29221 recommendations
-
-    // now give the other users the most popular jokes as the best recommended ones
-
-    val jokesWithAvgRating = training.groupBy("jokeId").mean("rating").toDF("jokeId", "prediction")
-
-    val topJokes = jokesWithAvgRating.orderBy(desc("prediction")).select($"jokeId").rdd.take(100).map(r => r.getAs[Int](0))
-
-    val userTopJokes = remainingValidationSet.rdd.map { r =>
-      (r.getAs[Int](0), (1 to r.getAs[Long](1).toInt).map(x => topJokes(x)))
-    }
-
-    val remainingScore = userTopJokes.toDF("userId", "topJokes")
-      .withColumn("jokeId", explode($"topJokes"))
-      .drop("topJokes")
-      .join(validationSet, Seq("userId", "jokeId"))
-
-    remainingScore
-      .select(avg($"rating")).show // -0.0832065127782358 - 2426 recommendations
-
-    // overall score = 4.727230011451
-
-
-    // Q. How to choose from similar jokes that they like depending on how similar and how much they like the joke?
-    // I think multiply similarity by rating and sum
-
-
+    jokeSimilarities_upper.write.mode("overwrite").parquet(jokeSimilaritiesUpperDir)
+    jokeSimilarities_lower.write.mode("overwrite").parquet(jokeSimilaritiesLowerDir)
   }
 
+
+  def recommendJokes(userJokeRatings: List[(JokeId, JokeRating)])(implicit spark: SparkSession): List[JokeId] = {
+
+    import spark.implicits._
+
+    val ratingThreshold = 5
+
+    // TODO pass in
+
+    val jokeSimilaritiesUpper = spark.sqlContext.read.parquet(jokeSimilaritiesUpperDir)
+        .as[RawSims].cache()
+
+    val jokeSimilaritiesLower = spark.sqlContext.read.parquet(jokeSimilaritiesLowerDir)
+      .as[RawSims].cache()
+
+    if (userJokeRatings.isEmpty) List()
+    else {
+
+      val applicableSortedUserJokes = (for {
+        jokeRating <- userJokeRatings
+        if jokeRating._2 >= ratingThreshold
+      } yield jokeRating) sortBy(-_._2) take 100
+
+      val asMap = applicableSortedUserJokes.toMap[JokeId, JokeRating]
+
+      // calc AVG_over_each[rating^2 * sim]
+
+//      jokeSimilaritiesUpper.show(truncate = false)
+      jokeSimilaritiesUpper.filter($"jokeId".isin((11 to 17).toList: _*)).show(truncate = false)
+      println("----------------", asMap)
+
+      def transformSimilarityByRating(r: JokeRating)(similarity: Double) = similarity * Math.pow(r, 2)
+
+      val List(upper, lower) =
+        List(jokeSimilaritiesUpper, jokeSimilaritiesLower) map { v =>
+        v.filter($"jokeId".isin(asMap.keys.toList: _*)).flatMap {
+          case RawSims(jokeId, similarities: SparseVector) =>
+            val userRatingForJoke = asMap(jokeId)
+            similarities.indices zip (similarities.values map transformSimilarityByRating(userRatingForJoke))
+
+          case RawSims(jokeId, similarities: DenseVector) =>
+            val userRatingForJoke = asMap(jokeId)
+            (0 to similarities.size) zip (similarities.values map transformSimilarityByRating(userRatingForJoke))
+
+        }.groupBy("_1").agg(sum($"_2"), count($"_2"))
+      }
+
+      upper.show(101)
+      lower.show(100)
+
+//      val joined = upper.toDF("jokeId", "").as("upper").join(lower.as("lower"), $"upper._1" === $"lower._1", "outer")
+//        .na.fill(0).select($"_1", $"sum(_2)")
+
+      List()
+    }
+  }
 }
+/*
+
++---+------------------+---------+
+| _1|           sum(_2)|count(_2)|
++---+------------------+---------+
+|  5|0.4771389221089738|        1|
+|  8|7.8271446396502835|        1|
+|  7| 6.096760884586708|        1|
++---+------------------+---------+
+
+ +---+--------------------+---------+
+| _1|             sum(_2)|count(_2)|
++---+--------------------+---------+
+|148| 0.06395619657584378|        1|
+| 31| 0.08095525549064193|        1|
+| 85|  1.1415969118766658|        1|
+|137|  0.9074238890028945|        1|
+| 65|  1.4696357640293014|        1|
+| 53|  0.6206115195666966|        1|
+|133|  0.5059270719657156|        1|
+| 78|  1.4219409777372651|        1|
+|108|-0.11899576079806203|        1|
+| 34|  1.0087717962343787|        1|
+|101|  1.5929057154614918|        1|
+|115| 0.22046455610302665|        1|
+|126|  1.3327523058042854|        1|
+| 81|  2.1836727444477786|        1|
+| 28|   0.448443593758165|        1|
+| 76| 0.10501287000375098|        1|
+| 26|  1.1369058455129504|        1|
+| 27|-0.25315952874132114|        1|
+| 44|  1.6679426372727009|        1|
+|103|  0.9608879957688111|        1|
+| 91|   0.803651833979033|        1|
+| 22|  1.3599817858369496|        1|
+|128|  0.7481452982364711|        1|
+|122|  0.8064566395594985|        1|
+| 93|  0.4037555031524289|        1|
+|111|   0.302982688878592|        1|
+| 47|  0.6770605088617273|        1|
+|140|  0.7306541437689215|        1|
+|132|  1.4200122683059146|        1|
+|146|   0.931203461724115|        1|
+| 52| 0.42285599483044045|        1|
+| 16|   5.498592020129018|        1|
+| 86|  0.8770955286695097|        1|
+|142|  1.0787995460787356|        1|
+| 20| 0.45690344793165927|        1|
+| 40|  1.1887520660630841|        1|
+|139|  0.6839995121233204|        1|
+| 94|  1.0949020270354684|        1|
+| 57|  1.6079040918875955|        1|
+| 54|  0.8920136368275854|        1|
+|120| 0.38077442655795124|        1|
+| 96|  0.8565869219238841|        1|
+| 48|  1.0381460075118278|        1|
+| 19|  3.3400621552040897|        1|
+| 92|  0.4468146948714945|        1|
+| 64|  1.3122303709820953|        1|
+|117| -0.3158083731718049|        1|
+| 41|  1.6836191579488498|        1|
+| 15|  7.5707361917776534|        1|
+| 43|  0.1673482339381679|        1|
+|112|  0.5602165692273109|        1|
+| 37|   1.323804366074618|        1|
+| 61|0.034805201690208835|        1|
+|127|-0.15700488078300767|        1|
+| 88|  1.1307402206423427|        1|
+|107|  0.4725348252613765|        1|
+| 17|  3.9653755285014647|        1|
+| 72| 0.38828241609077063|        1|
+| 35|  0.5660093252424383|        1|
+|114|-0.05034589269580...|        1|
+| 55|  1.1723363305135779|        1|
+| 59|  1.3622723646094197|        1|
+|100| 0.14292217099013033|        1|
+| 23|  1.0714249203565993|        1|
+| 39|  1.2834964573037813|        1|
+| 49|   1.027738952892007|        1|
+|130|  1.2577417478437782|        1|
+| 84|  1.1524995476738187|        1|
+|136|  1.1006473734054814|        1|
+| 87|  0.6716025233969417|        1|
+| 51| 0.12226142249954966|        1|
+| 69|  1.1555182587128352|        1|
+|129| 0.19537229539162618|        1|
+| 97|  1.1246994074996275|        1|
+| 63|  0.8986544799042788|        1|
+| 77| 0.48097425496855833|        1|
+|102|   1.082944081573874|        1|
+| 50|    1.32081210686197|        1|
+| 45|  1.6614265788706102|        1|
+| 38|   1.120665901196979|        1|
+| 82|  0.6645408634626818|        1|
+| 80|-0.11219648742018543|        1|
+| 25|  1.5743640715905995|        1|
+| 73| 0.13263377726020822|        1|
+|113|  1.0771776154454211|        1|
+| 24|  1.2835111260227177|        1|
+| 70|  0.7537932209422958|        1|
+| 62|  0.8255626696004214|        1|
+|121|   1.528026528119622|        1|
+|125|   2.018656219739522|        1|
+|143|  0.1226897864434791|        1|
+| 95|  0.7237112426201636|        1|
+| 29|   2.078523036182925|        1|
+| 21|  1.6593856776082687|        1|
+| 98|  1.2466031756853606|        1|
+| 32| 0.46649755834198536|        1|
+| 60|  1.3698938736114912|        1|
+| 90|   1.045244863259603|        1|
+| 75|   1.073354440843193|        1|
+|141|   1.005327641722886|        1|
+|145|  0.2758106845381179|        1|
++---+--------------------+---------+
+ */
+
+
+
+/*
+|19    |(151,[20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150],[0.03492284897010183,0.1367656584095856,0.04674847676465328,0.05066308154204588,0.035519289334701304,0.06341871967930984,0.10070330056359117,0.016566353370863304,0.08198292830857144,0.0686855122549098,0.0661129812269542,0.0047183764094147354,0.11733792407312196,0.0422090361795723,0.04702785794586653,0.09638438350669823,0.05654067667848907,0.03909017584476009,0.04352176201374005,0.08790565650983047,0.07333551311339222,0.05013563923213541,0.06781013392960546,0.011110373835840197,0.036635210271368554,0.05693878407159084,0.04605319483782107,0.08508606547165841,0.08210262327959095,0.07736110746485365,0.07591576351981222,0.0076423094039336495,0.004623105737775879,0.11265020406950921,0.07830280158017937,0.03741340839467252,0.06602696462996725,0.0434606222933911,0.03878624665341733,0.057647919087931966,0.0361130261109785,0.0077575231332181445,0.08265111944585776,0.08605542171624977,0.034018134776043006,0.09577996930750979,0.11219753752880626,0.041216457272165496,0.0860038884718249,0.08844323861818573,0.08013288983418256,0.04851880211830855,0.10458397703863871,0.009877384071430611,0.04283811327818421,0.048388971452446444,0.09455485074033176,0.07950779265402753,0.09367430839259885,0.04565915348010196,0.005082558942968762,0.08058506914231801,0.0579558194489649,0.11621863242775443,0.07383039232004654,0.05297527916037415,0.04653094205855597,0.12237789080766255,0.08292513196582026,0.1294881780351663,0.06480401590380884,0.0650253305360663,0.0861142473219217,0.08640399856547466,0.06832872817589818,0.06637580957182204,0.08320578869372601,0.0708990039005816,0.0936409902660148,0.08351909127968939,1.2929801393238532E-4,0.04417651636380273,0.05858816814346633,0.051681719565706996,0.09375996280016936,0.10832576462875308,0.10720959498756423,0.09601538679615453,0.10193550199201665,0.07605640504296704,0.07769225261332505,0.07956188521961108,0.07014638146077709,0.058980082788312384,0.09692614221777728,0.09942117159594502,0.001499399853762826,0.10875432382305548,0.08734828920092096,0.07568803249197842,0.08848582894664549,0.07119612787382251,0.06544580032064364,0.040726876788740006,0.02526001115818347,0.10812252771054212,0.09491418987477096,0.1127285441247414,0.06693439734934108,0.11648705369126182,0.05033604237908938,0.060596145805194686,0.11724085831213528,0.06668888678862891,0.0991067483404492,0.06078025247709129,0.05718243286779825,0.07203209891559546,0.13381217563408648,0.09975355927090784,0.05429085054154764,0.010444312427054672,0.11390342689908226,0.10126204158736352,0.0470811518835796,0.09920736063992931,0.04773841619263367,0.07470344907785245,0.09526944870217208,0.09042067050491663,0.0823757258827442])|
+|39    |(151,[40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150],[0.1935429689444608,0.19207055646487753,0.279241307414632,0.028237355860389345,0.08329153052531861,0.19606321884505104,0.16961375175286678,0.17459650752731867,0.19107065191960715,0.17598189375585385,0.20750819482912475,0.028743762732438075,0.012532810600252643,0.15111586506794703,0.14743867343355666,0.14521259117422058,0.20184710513116103,0.09687890950017806,0.06389877412040229,0.18951994786933957,0.11956947721131846,0.033146663747606546,0.15370297254837725,0.17480877625564348,0.10325004543210119,0.17252426390691367,0.167774818960114,0.15431659300538608,0.1676661899381391,0.16783577451323808,0.22516873815421556,0.1516515738079149,0.1791498123033148,0.025566970440251444,0.11248389344489547,0.11856364683642444,0.1571752056475869,0.21510438386461317,0.21127437881188793,0.16971337081056728,0.0353033651383596,0.16714809600085478,0.2155107931300078,0.2024134049246698,0.208259897126965,0.16044988670637722,0.1541371489873304,0.15208936364365327,0.19670442194055818,0.12600282082672,0.1797101536054159,0.1518357266043603,0.20161154176306711,0.18333038998809764,0.1498931645202199,0.15637169074171728,0.1946755741777367,0.16435132449375037,0.19716683389162443,0.21246313431178201,0.01834931091145635,0.10401155800390126,0.17585953331372223,0.15090167683313171,0.1586056210627262,0.14854219691371362,0.15734647227519125,0.187618417062499,0.18403205661977676,0.20100706838815227,0.18646629474686183,0.17996437987247826,0.1898315662376439,0.17089055617803456,0.13000675533605027,0.16154612341874033,0.02008393611203398,0.1527099139093696,0.20091726596671539,0.15006614621170664,0.18320785889652488,0.17211024459244345,0.1443186691572863,0.11900617961225898,0.029480100846587344,0.17703613799617499,0.1829408839721278,0.16797689454187054,0.1636856523316263,0.17426225707688048,0.1785565902408952,0.14409764470262004,0.17387367835830406,0.16267338551285074,0.1762895358014748,0.16795895929686355,0.1758404086257499,0.18519674788325838,0.1466049787305058,0.181305226723037,0.1272715672954616,0.043098201355317,0.17837543729500266,0.14919161714271678,0.1590230015596786,0.16561633612255106,0.1445912165276827,0.19073877408637502,0.1765501855010347,0.19034241889503045,0.13775340643236653])
+
+
+|13    |(151,[15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150],
+[0.20345972028426915,0.1477718898180333,0.1065674691884296,0.13259996239656174,0.08976248737447165,0.01227904993097714,0.044595153926586105,0.036548825203895456,0.028794004846992727,0.034493714754708894,0.042310241106976614,0.03055377171494089,-0.006803534768646095,0.012051695612957944,0.05585925923630544,0.03208901330337444,0.0021756316982166606,0.012536886813813099,0.028130879988635064,0.02711023370691693,0.015211215405601676,0.026725327990808123,0.03557657527746891,0.03011733139470517,0.034493320540278996,0.03194711276708101,0.045246416499565976,0.025921099163481207,0.004497399460848372,0.04482511790574311,0.044650002119607915,0.03446816651030394,0.018195660007033793,0.027899650833427252,0.027619966484601105,0.03549615981891885,0.0032857141225356,0.011364041785284615,0.01667862186419502,0.023972417006922483,0.03150594814602467,0.042357168579197094,0.043211612251749416,0.04535636970081597,0.03661038335419027,0.036815207568166926,9.353722571945403E-4,0.02218658074712232,0.02415088631830903,0.035265529991456476,0.03949572061352598,0.012087115776375154,0.03044764175112806,0.030210496725385182,0.031053970940952306,0.02025781297883085,0.031868062110753916,0.010434894278171746,0.003564465930131907,0.0350901248262191,0.028845859737790733,0.002822167965701451,0.012925940740891116,0.03821394726517779,0.016240225720558193,-0.0030152240639662845,0.05868510466132166,0.017859200845543724,0.028260786006250357,0.03097284460289758,0.030679841759652406,0.02357150036736119,0.0180489793979291,0.03038807365338196,0.010359923562537204,0.028090429004557996,0.021597738080597503,0.012007919776175614,0.010850725696114727,0.02942494025894836,0.01944937496963622,0.023020341895293853,0.030225729844117918,0.033501832187190564,0.03284997352377936,0.0038409613273348653,0.042808538442931796,0.02910357650023849,0.025823380697898718,0.01267128146252366,0.005666087977562654,0.009874822163480313,0.012699135320112244,-0.0031979511098646075,0.012114717628379944,0.015683536569906772,0.008142507091604193,0.015055538006646357,0.02894860562874016,-0.0013530204970654118,0.005924873853884082,0.00303395306605564,-0.008487190894162992,0.025192283233700066,0.00956013855277815,0.01023312084272914,0.041064942975534056,0.021673115817239953,0.02261810962228406,0.03918694391002168,0.05425036871108633,0.03581704664886551,-0.004219427056786017,0.020106027902082,0.0052505319911751195,0.033801175701257145,0.03138166200728091,0.03816211417108076,0.013596535124045033,0.011940789804723998,0.02718248761250182,0.029579343547580798,0.024386559768957126,0.0014672839830836368,0.018382142223147557,0.019635961939503403,0.027017673789919004,0.02899219419722483,0.0032972261876774824,0.03171508709747007,0.007412273166840042,0.02502562380338928,0.004511390809793667,0.0017187905556528835,0.009942576953668856,0.026799776097294076])                                  |
+
+ */

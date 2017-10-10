@@ -17,5 +17,6 @@ trait FileNames {
 
   val sparkMatrixFactModelDir = "models/spark/jester_matrix_fact"
 
-  val jokeSimilaritiesDir = "models/spark/jester_joke_similarities"
+  val jokeSimilaritiesUpperDir = "models/spark/jester_joke_similarities_upper"
+  val jokeSimilaritiesLowerDir = "models/spark/jester_joke_similarities_lower"
 }

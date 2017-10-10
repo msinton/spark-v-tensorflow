@@ -1,17 +1,14 @@
 package tools
 
-import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.linalg.distributed.{MatrixEntry, RowMatrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.{SparkConf, SparkContext}
+
 
 object CosineSimilarity {
 
-
-  def run(spark: SparkSession, rows: RDD[Vector], threshold: Double = 0.1) {
-    val sc = spark.sparkContext
+  def run(rows: RDD[Vector], threshold: Double = 0.1)(implicit spark: SparkSession) {
 
     val mat = new RowMatrix(rows)
 

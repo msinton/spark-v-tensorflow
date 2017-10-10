@@ -5,7 +5,7 @@ import org.apache.spark.sql.SparkSession
 
 object Main extends App {
 
-  implicit val spark = SparkSession.builder
+  implicit val spark: SparkSession = SparkSession.builder
     .master("local")
     .appName("Jester Matrix Fact")
     .config("spark.sql.warehouse.dir", "/tmp")
@@ -13,14 +13,17 @@ object Main extends App {
 
   spark.sparkContext.setCheckpointDir("/tmp/checkpoints")
 
-  ImportData(spark)
+  ImportData
 
   // manually choose what you want to run
 
 //  recommenders.Popularity.run
 //  recommenders.MatrixFact.run
 //  recommenders.JokesTfIdf.run
-  recommenders.JokesContentSimilarity.run
+//  recommenders.JokesContentSimilarity.run
+//  recommenders.evaluate.JokesSimilarity.run
+//  recommenders.JokesSimilarity.createSimilaritiesDF
+//  recommenders.JokesSimilarity.recommendJokes(List((13, 6.1), (12, 4.1), (37, 7.5)))
 
 
   spark.close()
