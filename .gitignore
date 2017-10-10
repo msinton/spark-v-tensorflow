@@ -3,4 +3,5 @@ target/
 project/project/
 project/target/
 project/spark-warehouse
+data/
 models/
