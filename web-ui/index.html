@@ -1,19 +1,56 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Example Scala.js application</title>
+    <title>Joke Recommender application</title>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+
+    <!-- Bootstrap -->
+    <link href="css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
 
-<h1>Example Scala.js application - fast-optimized version</h1>
+<div class="container">
+    <h1>Joke Recommender</h1>
 
-<p>After having compiled and fast-optimized properly the code for the application
-    (using `sbt fastOptJS`), you should see "It works" below.
-    See README.md for detailed explanations.</p>
+    <h2>Joke</h2>
+    <div id="jokecontent" >
+        <p id="joketext" ></p>
+    </div>
 
-<div id="playground">
-</div>
+    <form>
+        <div class="form-inline">
+            <input type="radio" name="rating" value="1">1
+            <input type="radio" name="rating" value="2">2
+            <input type="radio" name="rating" value="3">3
+            <input type="radio" name="rating" value="4">4
+            <input type="radio" name="rating" value="5">5
+            <input type="radio" name="rating" value="6">6
+            <input type="radio" name="rating" value="7">7
+            <input type="radio" name="rating" value="8">8
+            <input type="radio" name="rating" value="9">9
+            <input type="radio" name="rating" value="10">10
+            <span class="help-block">Rate this joke</span>
+        </div>
+        <br>
+        <div class="form-group">
+            <button id="submit-joke">submit</button>
+        </div>
+        <span id="test"></span>
+    </form>
+
+    <div id="playground">
+    </div>
+
+    <script type="text/javascript" src="./target/scala-2.11/webui-fastopt.js"></script>
+
+</div><!-- /.container -->
+
+<!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+<!-- bootstrap compiled and minified CSS -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+<!-- bootstrap compiled and minified JavaScript -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
 
 <script type="text/javascript" src="./target/scala-2.11/webui-fastopt.js"></script>
 

@@ -34,6 +34,10 @@ lazy val webUI = project.in(file("web-ui")).
   settings(commonSettings,
     scalaJSUseMainModuleInitializer := true,
     libraryDependencies += "org.scala-js" %%% "scalajs-dom" % "0.9.2",
-  ).dependsOn(server)
+
+    // Add the sources of the server project
+    unmanagedSourceDirectories in Compile +=
+      (scalaSource in (server, Compile)).value / "frp"
+  ) //.dependsOn(server)
 
 
