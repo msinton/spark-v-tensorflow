@@ -5,3 +5,5 @@ project/target/
 project/spark-warehouse
 data/
 models/
+server/target/
+web-ui/target/
