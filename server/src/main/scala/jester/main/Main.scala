@@ -20,7 +20,8 @@ object Main extends App {
 //  recommenders.Popularity.run
 //  recommenders.MatrixFact.run
 //  recommenders.JokesTfIdf.run
-  recommenders.JokesContentSimilarity.run
+//  recommenders.ContentSimilarityGenerator.run
+  recommenders.ContentSimilarityAnalysis.run
 //  recommenders.evaluate.JokesSimilarity.run
 //  recommenders.JokesSimilarity.createSimilaritiesDF
 //  recommenders.JokesSimilarity.recommendJokes(List((13, 6.1), (12, 4.1), (37, 7.5)))
