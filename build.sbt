@@ -15,10 +15,6 @@ lazy val commonSettings = Seq(
   testFrameworks += new TestFramework("utest.runner.Framework")
 )
 
-
-lazy val root = (project in file("."))
-  .aggregate(server, webUI)
-
 lazy val server = project.in(file("server")).
   settings(commonSettings,
     libraryDependencies ++= Seq(
@@ -32,12 +28,15 @@ lazy val server = project.in(file("server")).
 lazy val webUI = project.in(file("web-ui")).
   enablePlugins(ScalaJSPlugin).
   settings(commonSettings,
-    scalaJSUseMainModuleInitializer := true,
-    libraryDependencies += "org.scala-js" %%% "scalajs-dom" % "0.9.2",
+//    scalaJSUseMainModuleInitializer := true,
+    libraryDependencies ++= Seq(
+      "org.scala-js" %%% "scalajs-dom" % "0.9.2",
+      "com.lihaoyi" %%% "scalatags" % "0.6.7"
+    ),
 
     // Add the sources of the server project
-    unmanagedSourceDirectories in Compile +=
-      (scalaSource in (server, Compile)).value / "frp"
-  ) //.dependsOn(server)
+//    unmanagedSourceDirectories in Compile +=
+//      (scalaSource in (server, Compile)).value / "jester"
+  ).dependsOn(server)
 
 

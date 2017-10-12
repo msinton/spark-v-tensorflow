@@ -1,4 +1,4 @@
-package frp
+package jester.frp
 
 import scala.util.DynamicVariable
 
@@ -16,12 +16,11 @@ class Signal[T](expr: => T) {
     observed = Nil
     val newValue = caller.withValue(this)(myExpr())
 
-
     if (myValue != newValue) {
-    myValue = newValue
-    val obs = observers
-    observers = Set()
-    obs.foreach(_.computeValue())
+      myValue = newValue
+      val obs = observers
+      observers = Set()
+      obs.foreach(_.computeValue())
     }
   }
 

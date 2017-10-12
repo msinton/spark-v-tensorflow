@@ -28,27 +28,6 @@
         <p id="joketext" ></p>
     </div>
 
-    <form>
-        <div class="form-inline">
-            <input type="radio" name="rating" value="1">1
-            <input type="radio" name="rating" value="2">2
-            <input type="radio" name="rating" value="3">3
-            <input type="radio" name="rating" value="4">4
-            <input type="radio" name="rating" value="5">5
-            <input type="radio" name="rating" value="6">6
-            <input type="radio" name="rating" value="7">7
-            <input type="radio" name="rating" value="8">8
-            <input type="radio" name="rating" value="9">9
-            <input type="radio" name="rating" value="10">10
-            <span class="help-block">Rate this joke</span>
-        </div>
-        <br>
-        <div class="form-group">
-            <button id="submit-joke">submit</button>
-        </div>
-        <span id="test"></span>
-    </form>
-
     <div id="playground">
     </div>
 
@@ -57,6 +36,9 @@
 </div><!-- /.container -->
 
 <script type="text/javascript" src="./target/scala-2.11/webui-fastopt.js"></script>
+<script>
+    jester.main(document.getElementById('playground'));
+</script>
 
 </body>
 </html>

@@ -1,11 +1,14 @@
 package jester
 
-import frp.{ExampleJoke, _}
+import jester.common.{JokeId, JokeRating}
+import jester.frp.{ExampleJoke, _}
 import org.scalajs.dom
+import org.scalajs.dom.raw.MouseEvent
 import org.scalajs.dom.{document, html}
 
+import scalatags.JsDom.all._
 import scala.scalajs.js
-import scala.scalajs.js.annotation.JSExportTopLevel
+import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 
 @js.native
 trait EventName extends js.Object {
@@ -26,34 +29,66 @@ trait ElementExt extends js.Object {
 }
 
 /**
-  * Created by matt on 10/10/17.
+  * Annotation turns the object into an in-scope javascript object called `jester`
   */
+@JSExportTopLevel("jester")
 object JesterUI  {
 
-  def main(args: Array[String]): Unit = {
+  private var jokeRated: Option[Var[JokeRated]] = None
+
+  private def updateJokeRated(jokeId: JokeId, rating: JokeRating): Unit = {
+    jokeRated match {
+      case None =>
+        val s = ExampleJoke.registerRating(jokeId, rating)
+        jokeRated = Option(s)
+
+      case Some(r) =>
+        r() = JokeRated(jokeId, rating)
+    }
+  }
+
+  @JSExport
+  def main(target: html.Div): Unit = {
 
     val jokeText = elementById[html.Paragraph]("joketext")
 
     Signal {
-      jokeText.textContent = ExampleJoke.joke()
+      jokeText.textContent = ExampleJoke.joke().content
     }
 
-    val submit = elementById[html.Button]("submit")
-
-//    submit.addEventListener("onclick", addClickedMessage)
+    showOnScreen(target)
   }
 
-  def addClickedMessage(event: dom.Event): Unit = {
-    elementById[html.Span]("test").textContent = "You clicked the button!"
+  def showOnScreen(target: html.Div): Unit = {
+    target.appendChild(div(
+      ratingInputs()
+    ).render).render
   }
 
-  def ratingInputs(): Unit = {
-    val ids = (1 to 10).toList map(_.toString)
-    val inputs = ids.map(id => elementById[html.Input](id))
-    println(inputs)
+  def createJokeRated(rating: JokeRating): JokeRated = {
+    val jokeId = ExampleJoke.joke().id
+    JokeRated(jokeId, rating)
+  }
 
-    val signals = inputs map inputValueSignal
+  def createRatingRadio(jokeRating: JokeRating): html.Input = {
+    val ratingInput = input(`type`:="radio", jokeRating.toString).render
 
+    ratingInput.onclick = (_: MouseEvent) => {
+
+      val jokeId = ExampleJoke.joke().id
+      updateJokeRated(jokeId, jokeRating)
+
+      ratingInput.checked = false
+      ExampleJoke.nextJoke() // move this to 'submit' button if required!
+    }
+    ratingInput
+  }
+
+  def ratingInputs(): Seq[html.Span] = {
+    (1 to 10) map (x => span(
+      createRatingRadio(x),
+      s"$x "
+    ).render)
   }
 
   // Helpers
