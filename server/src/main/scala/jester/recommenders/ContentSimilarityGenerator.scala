@@ -7,11 +7,7 @@ import org.apache.spark.sql.SparkSession
 
 object ContentSimilarityGenerator extends FileNames {
 
-  case class UserBestJokes(userId: Int, toPredictCount: Int, jokeId: Int, rating: Int)
-
   case class RawJokeTfIdf(jokeId: BigInt, jokeTfIdf: SparseVector)
-
-  case class RowMaxSimilarity(jokeId: Long, columnJokeId: Int, similarity: Double)
 
   def run(implicit spark: SparkSession): Unit = {
     import spark.implicits._
