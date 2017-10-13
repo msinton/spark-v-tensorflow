@@ -22,19 +22,25 @@
 </div>
 
 <div class="ui container">
+
     <div class="ui centered fluid card" style="max-width: 600px">
+        <div class="ui active inverted dimmer" id="recommended-joke-dimmer">
+            <div class="ui loader"></div>
+        </div>
         <div class="center aligned content">
             <div class="header">Recommended joke</div>
         </div>
-        <div class="center aligned content">
-            Can a kangaroo jump higher than a house?<br/>
-            Of course, a house doesn't jump at all.
-        </div>
+        <div class="center aligned content" id="recommended-joke-content"></div>
         <div class="center aligned extra">
             <div class="ui primary button">That was truly terrible</div>
         </div>
     </div>
 </div>
+
+<script type="text/javascript" src="./target/scala-2.11/webui-fastopt.js"></script>
+<script type="text/javascript">
+    recommendation.main()
+</script>
 
 </body>
 </html>

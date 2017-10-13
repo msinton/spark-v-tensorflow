@@ -4,7 +4,7 @@ import utest._
 
 object ExampleTest extends TestSuite {
 
-  import JesterUI._
+  import RecommendedJoke._
 
   def tests = Tests {
     'ScalaJSExample {
