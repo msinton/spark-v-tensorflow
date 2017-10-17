@@ -35,4 +35,19 @@ object Popularity extends FileNames {
     println(s"RMSE = $rmse")
   }
 
+  def createBestModel(implicit spark: SparkSession) = {
+    val training = spark.sqlContext.read.parquet(trainParquet)
+    val validationSet = spark.sqlContext.read.parquet(validationParquet)
+
+    val allData = training.join(validationSet, Seq("userId", "jokeId", "rating"))
+
+    allData.show()
+    training.count()
+    validationSet.count()
+    allData.count()
+
+//    val avgRatings = allData.groupBy("jokeId").mean("rating").toDF("jokeId", "prediction")
+
+
+  }
 }

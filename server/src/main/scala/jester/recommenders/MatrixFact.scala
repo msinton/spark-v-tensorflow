@@ -52,7 +52,7 @@ object MatrixFact extends FileNames {
 
     val sortedResults = results.sortBy(_._4).reverse
     val bestModel = sortedResults.head._5
-//    bestModel.write.overwrite.save(sparkMatrixFactModelDir)
+    bestModel.write.overwrite.save(sparkMatrixFactModelDir)
 
 
     println(sortedResults) // score = 2.518311803580506, rmse = 4.69693997691974 , rank = 16, lambda = 0.08

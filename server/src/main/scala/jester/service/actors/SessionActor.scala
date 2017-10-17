@@ -3,6 +3,7 @@ package jester.service.actors
 import akka.actor.{Actor, ActorRef, PoisonPill}
 import com.typesafe.scalalogging.LazyLogging
 import jester.common.JokeId
+import jester.recommenders.MatrixFact
 import jester.service.events.{SessionEvent, SessionLogout, SessionStart}
 import jester.service.messages.JesterMessages._
 
@@ -11,6 +12,7 @@ import scala.concurrent.ExecutionContext
 class SessionActor(implicit val ec: ExecutionContext) extends Actor with LazyLogging {
 
   private val active = collection.mutable.LinkedHashMap[String, ActorRef]()
+  private val matrixFactorizationRecommender = MatrixFact.load
 
   private def getActive(sessionId: String): Option[ActorRef] = active.get(sessionId)
 
@@ -30,16 +32,18 @@ class SessionActor(implicit val ec: ExecutionContext) extends Actor with LazyLog
     StartingJokes(List(Joke(1, "content 1")))
   }
 
-  private def recommendJoke(sessionId: String, jokeRatedId: JokeId) = {
+  private def recommendJoke(sessionId: String, jokeRated: JokeRated) = {
     // TODO get the next joke properly
+//    matrixFactorizationRecommender.f
+
     Joke(99, "content 99")
   }
 
   private def handleRequest(request: JesterMessage, sessionId: String): Unit = {
     request match {
-      case JokeRated(id, rating) =>
+      case jokeRated@JokeRated(id, rating) =>
         // TODO save the joke rating for this user (don't wait for result)
-        getActive(sessionId) foreach (_ ! recommendJoke(sessionId, id))
+        getActive(sessionId) foreach (_ ! recommendJoke(sessionId, jokeRated))
 
       case _: Logout => cleanupDeadSession(sessionId)
 

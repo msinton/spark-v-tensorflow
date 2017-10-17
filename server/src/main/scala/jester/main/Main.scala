@@ -17,11 +17,11 @@ object Main extends App {
 
   // manually choose what you want to run
 
-//  recommenders.Popularity.run
+  recommenders.Popularity.createBestModel
 //  recommenders.MatrixFact.run
 //  recommenders.JokesTfIdf.run
 //  recommenders.ContentSimilarityGenerator.run
-  recommenders.ContentSimilarityAnalysis.run
+//  recommenders.ContentSimilarityAnalysis.run
 //  recommenders.evaluate.JokesSimilarity.run
 //  recommenders.JokesSimilarity.createSimilaritiesDF
 //  recommenders.JokesSimilarity.recommendJokes(List((13, 6.1), (12, 4.1), (37, 7.5)))
