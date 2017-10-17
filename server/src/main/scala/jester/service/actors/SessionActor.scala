@@ -8,9 +8,6 @@ import jester.service.messages.JesterMessages._
 
 import scala.concurrent.ExecutionContext
 
-/**
-  * Created by matt on 30/04/17.
-  */
 class SessionActor(implicit val ec: ExecutionContext) extends Actor with LazyLogging {
 
   private val active = collection.mutable.LinkedHashMap[String, ActorRef]()

@@ -18,7 +18,7 @@ class WebsocketFlow(sessionWorker: ActorRef) extends LazyLogging {
 
   def flow(sessionId: String, ip: String): Flow[Message, Message, Any] =
     Flow.fromGraph(GraphDSL.create(userActorSource) { implicit builder =>
-      playerActor =>
+      userActor =>
 
         import GraphDSL.Implicits._
 
@@ -41,7 +41,7 @@ class WebsocketFlow(sessionWorker: ActorRef) extends LazyLogging {
         materialization ~> merge ~> sessionActorSink
         messagesToEventFlow ~> merge
 
-        playerActor ~> JesterMessagesToMessagesFlow
+        userActor ~> JesterMessagesToMessagesFlow
 
         FlowShape(messagesToEventFlow.in, JesterMessagesToMessagesFlow.out)
     })
