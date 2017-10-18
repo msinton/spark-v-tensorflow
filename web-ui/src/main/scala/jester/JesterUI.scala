@@ -1,6 +1,6 @@
 package jester
 
-import jester.common.{JokeId, JokeRating}
+import jester.common.{JokeId, Rating}
 import jester.frp.{ExampleJoke, _}
 import org.scalajs.dom
 import org.scalajs.dom.raw.MouseEvent
@@ -36,7 +36,7 @@ object JesterUI  {
 
   private var jokeRated: Option[Var[JokeRated]] = None
 
-  private def updateJokeRated(jokeId: JokeId, rating: JokeRating): Unit = {
+  private def updateJokeRated(jokeId: JokeId, rating: Rating): Unit = {
     jokeRated match {
       case None =>
         val s = ExampleJoke.registerRating(jokeId, rating)
@@ -65,12 +65,12 @@ object JesterUI  {
     ).render).render
   }
 
-  def createJokeRated(rating: JokeRating): JokeRated = {
+  def createJokeRated(rating: Rating): JokeRated = {
     val jokeId = ExampleJoke.joke().id
     JokeRated(jokeId, rating)
   }
 
-  def createRatingRadio(jokeRating: JokeRating): html.Input = {
+  def createRatingRadio(jokeRating: Rating): html.Input = {
     val ratingInput = input(`type`:="radio", jokeRating.toString).render
 
     ratingInput.onclick = (_: MouseEvent) => {

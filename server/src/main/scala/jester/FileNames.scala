@@ -19,4 +19,6 @@ trait FileNames {
 
   val jokeSimilaritiesUpperDir = "models/spark/jester_joke_similarities_upper"
   val jokeSimilaritiesLowerDir = "models/spark/jester_joke_similarities_lower"
+
+  val popularityJson = "models/spark/popularity.json"
 }

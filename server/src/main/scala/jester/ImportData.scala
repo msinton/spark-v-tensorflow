@@ -18,8 +18,8 @@ object ImportData extends FileNames with DownloadUrls {
   }
 
   def apply(implicit spark: SparkSession): Unit = {
-    downloadAndSaveOnce(spark, trainUrl, trainFileName, ratingsSchema, trainParquet)
-    downloadAndSaveOnce(spark, testUrl, testFileName, testRatingsSchema, testParquet)
-    downloadAndSaveOnce(spark, validationUrl, validationFileName, ratingsSchema, validationParquet)
+    downloadAndSaveOnce(spark, trainUrl, trainFileName, userJokeRatingSchema, trainParquet)
+    downloadAndSaveOnce(spark, testUrl, testFileName, UserJokeSchema, testParquet)
+    downloadAndSaveOnce(spark, validationUrl, validationFileName, userJokeRatingSchema, validationParquet)
   }
 }

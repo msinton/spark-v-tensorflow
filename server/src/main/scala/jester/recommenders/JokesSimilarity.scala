@@ -24,10 +24,10 @@ object JokesSimilarity extends FileNames {
     val numJokes = training.select(max("jokeId")).head().getAs[Int](0) + 1
 
     // (userId, (jokeId, rating))
-    val ratingsByUserId: RDD[(UserId, (Array[JokeId], Array[JokeRating]))] = training.rdd.map {
-      case Row(userId: UserId, jokeId: JokeId, rating: JokeRating) => (userId, Map(jokeId -> rating))
+    val ratingsByUserId: RDD[(UserId, (Array[JokeId], Array[Rating]))] = training.rdd.map {
+      case Row(userId: UserId, jokeId: JokeId, rating: Rating) => (userId, Map(jokeId -> rating))
     }.reduceByKey(_ ++ _).map {
-      case (userId, jokeRatings) => (userId, jokeRatings.toArray.sortBy(_._1).unzip[JokeId, JokeRating])
+      case (userId, jokeRatings) => (userId, jokeRatings.toArray.sortBy(_._1).unzip[JokeId, Rating])
     }
 
     // Cosine similarity between jokes based on user ratings
@@ -55,7 +55,7 @@ object JokesSimilarity extends FileNames {
   }
 
 
-  def recommendJokes(userJokeRatings: List[(JokeId, JokeRating)])(implicit spark: SparkSession): List[JokeId] = {
+  def recommendJokes(userJokeRatings: List[(JokeId, Rating)])(implicit spark: SparkSession): List[JokeId] = {
 
     import spark.implicits._
 
@@ -77,7 +77,7 @@ object JokesSimilarity extends FileNames {
         if jokeRating._2 >= ratingThreshold
       } yield jokeRating) sortBy(-_._2) take 100
 
-      val asMap = applicableSortedUserJokes.toMap[JokeId, JokeRating]
+      val asMap = applicableSortedUserJokes.toMap[JokeId, Rating]
 
       // calc AVG_over_each[rating^2 * sim]
 
@@ -85,7 +85,7 @@ object JokesSimilarity extends FileNames {
       jokeSimilaritiesUpper.filter($"jokeId".isin((11 to 17).toList: _*)).show(truncate = false)
       println("----------------", asMap)
 
-      def transformSimilarityByRating(r: JokeRating)(similarity: Double) = similarity * Math.pow(r, 2)
+      def transformSimilarityByRating(r: Rating)(similarity: Double) = similarity * Math.pow(r, 2)
 
       val List(upper, lower) =
         List(jokeSimilaritiesUpper, jokeSimilaritiesLower) map { v =>

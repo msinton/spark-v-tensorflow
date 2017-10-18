@@ -1,7 +1,7 @@
 package jester.service.messages
 
 import argonaut.derive.{JsonSumCodec, JsonSumCodecFor}
-import jester.common.{JokeId, JokeRating}
+import jester.common.{JokeId, Rating}
 
 object JesterMessages {
 
@@ -9,7 +9,7 @@ object JesterMessages {
 
   case class Joke(id: JokeId, content: String) extends JesterMessage
 
-  case class JokeRated(id: JokeId, rating: JokeRating) extends JesterMessage
+  case class JokeRated(id: JokeId, rating: Rating) extends JesterMessage
 
   case class StartingJokes(jokes: List[Joke]) extends JesterMessage
 

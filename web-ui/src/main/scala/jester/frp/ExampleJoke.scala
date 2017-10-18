@@ -1,12 +1,12 @@
 package jester.frp
 
-import jester.common.{JokeId, JokeRating}
+import jester.common.{JokeId, Rating}
 
 import scala.util.Random
 
 case class Joke(id: JokeId, content: String)
 
-case class JokeRated(id: JokeId, rating: JokeRating)
+case class JokeRated(id: JokeId, rating: Rating)
 
 object ExampleJoke {
 
@@ -17,7 +17,7 @@ object ExampleJoke {
 
   private val jokeId: Var[Int] = Var(random.nextInt(jokes.size))
 
-  private val jokeRatings: Var[Map[JokeId, JokeRating]] = Var(Map())
+  private val jokeRatings: Var[Map[JokeId, Rating]] = Var(Map())
 
   private def hasRatedAllJokes = jokeRatings().keySet.size >= numJokes
 
@@ -32,7 +32,7 @@ object ExampleJoke {
       jokeId() = nextId
   }
 
-  def registerRating(jokeId: JokeId, rating: JokeRating): Var[JokeRated] = {
+  def registerRating(jokeId: JokeId, rating: Rating): Var[JokeRated] = {
 
     val newRating = Var(JokeRated(jokeId, rating))
 

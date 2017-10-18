@@ -1,6 +1,9 @@
 package jester.recommenders
 
-import jester.FileNames
+import argonaut._
+import Argonaut._
+import jester.Schemas._
+import jester.{FileNames, ImportData}
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions.Window
@@ -8,6 +11,8 @@ import org.apache.spark.sql.functions.{avg, desc, percent_rank}
 
 
 object Popularity extends FileNames {
+
+  import ArgonautShapeless._
 
   def run(implicit spark: SparkSession) = {
     val training = spark.sqlContext.read.parquet(trainParquet)
@@ -36,18 +41,30 @@ object Popularity extends FileNames {
   }
 
   def createBestModel(implicit spark: SparkSession) = {
+    import spark.implicits._
+
     val training = spark.sqlContext.read.parquet(trainParquet)
     val validationSet = spark.sqlContext.read.parquet(validationParquet)
 
-    val allData = training.join(validationSet, Seq("userId", "jokeId", "rating"))
+    val allData = training.join(validationSet, Seq("userId", "jokeId", "rating"), "outer")
 
-    allData.show()
-    training.count()
-    validationSet.count()
-    allData.count()
+    val avgRatings = allData.groupBy("jokeId").mean("rating").toDF("jokeId", "rating").as[JokeRating]
 
-//    val avgRatings = allData.groupBy("jokeId").mean("rating").toDF("jokeId", "prediction")
+    val ratings = JokeRatings(avgRatings.collect.toList.sortBy(-_.rating))
 
+    val encode = EncodeJson.of[JokeRatings]
 
+    val json = encode(ratings).nospaces
+    scala.tools.nsc.io.Path(popularityJson).createFile().writeAll(json)
   }
+}
+
+object PopularityModel extends App {
+
+  import jester.main.SparkAppImplicits._
+
+  ImportData
+  Popularity.createBestModel
+
+  spark.close()
 }

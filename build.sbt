@@ -18,15 +18,25 @@ lazy val commonSettings = Seq(
     "org.scalacheck" %% "scalacheck" % "1.13.4" % Test,
   ),
 
-  testFrameworks += new TestFramework("utest.runner.Framework")
+  assemblyOption in assembly := (assemblyOption in assembly).
+    value.copy(includeScala = false),
+
+  assemblyMergeStrategy in assembly := {
+    case PathList("META-INF", _) => MergeStrategy.discard
+    case _ => MergeStrategy.first
+  },
+
+  testFrameworks += new TestFramework("utest.runner.Framework"),
+
+  test in assembly := {}
 )
 
 lazy val server = project.in(file("server")).
   settings(commonSettings,
     libraryDependencies ++= Seq(
-      "org.apache.spark" %% "spark-core" % sparkVersion,
-      "org.apache.spark" %% "spark-streaming" % sparkVersion,
-      "org.apache.spark" %% "spark-mllib" % sparkVersion,
+      "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
+      "org.apache.spark" %% "spark-streaming" % sparkVersion % Provided,
+      "org.apache.spark" %% "spark-mllib" % sparkVersion % Provided,
       "org.apache.bahir" %% "spark-streaming-twitter" % "2.0.0",
 
       "ch.qos.logback" % "logback-classic" % "1.1.7",
@@ -34,7 +44,10 @@ lazy val server = project.in(file("server")).
 
       "com.typesafe.akka" %% "akka-http" % "10.0.6",
       "com.typesafe.akka" %% "akka-http-testkit" % "10.0.6" % Test,
-    )
+    ),
+
+    assemblyJarName in assembly := "spark-jobs.jar",
+
   )
 
 lazy val webUI = project.in(file("web-ui")).

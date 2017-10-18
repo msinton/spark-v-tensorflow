@@ -1,15 +1,25 @@
 package jester
 
+import argonaut.derive.{JsonSumCodec, JsonSumCodecFor}
+import jester.common.{JokeId, Rating, UserId}
 import org.apache.spark.sql.Encoders
 
 object Schemas {
 
-  case class JokeRatings(userId: Int, jokeId: Int, rating: Double)
+  sealed trait JokeObjects
 
-  val ratingsSchema = Encoders.product[JokeRatings].schema
+  case class UserJokeRating(userId: UserId, jokeId: JokeId, rating: Rating) extends JokeObjects
 
-  case class JokeRatingsTest(userId: Int, jokeId: Int)
+  val userJokeRatingSchema = Encoders.product[UserJokeRating].schema
 
-  val testRatingsSchema = Encoders.product[JokeRatingsTest].schema
+  case class UserJoke(userId: UserId, jokeId: JokeId) extends JokeObjects
 
+  val UserJokeSchema = Encoders.product[UserJoke].schema
+
+  case class JokeRating(jokeId: JokeId, rating: Rating) extends JokeObjects
+
+  case class JokeRatings(ratings: List[JokeRating]) extends JokeObjects
+
+  implicit def typeFieldJsonSumCodecFor[S]: JsonSumCodecFor[S] =
+    JsonSumCodecFor(JsonSumCodec.typeField)
 }
